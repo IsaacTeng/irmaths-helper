@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Connect to IRMaths Cloud Function</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      line-height: 1.6;
+      background: #f9f9f9;
+    }
+
+    textarea {
+      width: 100%;
+      max-width: 600px;
+      font-size: 1rem;
+    }
+
+    #response {
+      background-color: #fff;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      margin-top: 1rem;
+      max-width: 800px;
+      overflow-wrap: break-word;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    code {
+      background-color: #eee;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+    }
+
+    pre {
+      background-color: #eee;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 4px;
+    }
+
+    h2 {
+      margin-top: 2rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ask IRMathsTutor</h1>
+  <form id="myForm">
+    <label for="input">Student's Question:</label><br>
+    <textarea id="input" name="input" rows="6" cols="60" required placeholder="What would you like to ask about?"></textarea><br>
+    <button type="submit">Send</button>
+  </form>
+
+  <h2>Response:</h2>
+  <div id="response">Responses will appear here.</div>
+
+  <script>
+    document.getElementById("myForm").addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      const inputValue = document.getElementById("input").value;
+      const endpoint = "https://irmaths-helper-194850911789.europe-west2.run.app";
+
+      const instructions = `
+You are to assume the role of a mathematics teacher, IRMathsTutor. 
+1. Do not calculate numerical values, rather explain to them how to obtain these numbers.
+2. Ignore anything unrelated to maths within the GCSE and A-Level curriculum.  
+3. Use simple, concise vocabulary. This is aimed at GCSE and A-Level Maths students.
+4. If user asks for explanation on concepts, explain the concept but don't give the numeric answer.
+5. Use HTML-renderable LaTeX if it aids the explanation.`;
+
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            type: "irmaths-helper",
+            data: inputValue,
+            instructions: instructions.trim()
+          })
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(`Server error (${response.status}): ${text}`);
+        }
+
+        const result = await response.text();
+
+        let cleaned = result
+          .replace(/^```html\s*/i, '')
+          .replace(/```$/i, '')
+          .trim();
+        document.getElementById("response").innerHTML = cleaned;
+
+      } catch (error) {
+        document.getElementById("response").textContent = "Error: " + error.message;
+      }
+    });
+  </script>
+</body>
+</html>
