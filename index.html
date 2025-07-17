@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>IRMaths Tutor Chat</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+      line-height: 1.6;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      margin-top: 20px;
+    }
+
+    .header {
+      background: linear-gradient(90deg, #2c3e50 0%, #4ca1af 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      margin-bottom: 5px;
+      font-size: 28px;
+    }
+
+    .header p {
+      opacity: 0.9;
+      font-size: 16px;
+    }
+
+    #chat-container {
+      display: flex;
+      flex-direction: column;
+      height: 65vh;
+    }
+
+    #chat-messages {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 20px;
+      background: #fafafa;
+    }
+
+    .message {
+      margin-bottom: 15px;
+      padding: 12px 16px;
+      border-radius: 18px;
+      max-width: 80%;
+      word-wrap: break-word;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+      position: relative;
+    }
+
+    .user-message {
+      background: linear-gradient(135deg, #3494E6 0%, #3457D6 100%);
+      color: white;
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+
+    .bot-message {
+      background: white;
+      border: 1px solid #e0e0e0;
+      margin-right: auto;
+      border-bottom-left-radius: 4px;
+    }
+
+    .message-header {
+      font-weight: bold;
+      margin-bottom: 5px;
+      font-size: 0.9rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .message-content {
+      line-height: 1.5;
+    }
+
+    .message-time {
+      font-size: 0.75rem;
+      opacity: 0.8;
+      margin-top: 8px;
+      text-align: right;
+    }
+
+    #input-area {
+      display: flex;
+      padding: 15px;
+      border-top: 1px solid #e0e0e0;
+      background-color: white;
+    }
+
+    #user-input {
+      flex-grow: 1;
+      padding: 12px 15px;
+      border: 1px solid #ddd;
+      border-radius: 24px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    #user-input:focus {
+      border-color: #3498db;
+      box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    }
+
+    #send-button {
+      margin-left: 10px;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #3494E6 0%, #3457D6 100%);
+      color: white;
+      border: none;
+      border-radius: 24px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    #send-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    #send-button:disabled {
+      background: #cccccc;
+      transform: none;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(0,0,0,.1);
+      border-radius: 50%;
+      border-top-color: #3498db;
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* MathJax styles */
+    .MathJax {
+      padding: 5px 0;
+      outline: none;
+    }
+    
+    mjx-container[jax="CHTML"] {
+      display: inline-block;
+      margin: 2px 0;
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    
+    .math-example {
+      background: #f8f9fa;
+      border-left: 4px solid #3498db;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 0 8px 8px 0;
+    }
+    
+    .tips {
+      padding: 15px;
+      background: #e3f2fd;
+      border-radius: 8px;
+      margin: 15px 0;
+      font-size: 0.9rem;
+    }
+    
+    .tips h3 {
+      margin-bottom: 10px;
+      color: #2c3e50;
+    }
+    
+    .tips ul {
+      padding-left: 20px;
+    }
+    
+    .tips li {
+      margin-bottom: 5px;
+    }
+    
+    /* Special styling for inline math */
+    .inline-math {
+      display: inline;
+      background: #f3f4f6;
+      padding: 2px 4px;
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
+    }
+    
+    .error {
+      color: #e74c3c;
+      background: #ffeaea;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+    }
+  </style>
+  <!-- MathJax Configuration -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']],
+        processEscapes: true,
+        processEnvironments: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+        ignoreHtmlClass: 'no-mathjax'
+      },
+      chtml: {
+        fontURL: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2'
+      },
+      startup: {
+        ready: () => {
+          MathJax.startup.defaultReady();
+          console.log('MathJax is ready');
+          window.mathJaxReady = true;
+          
+          // Reprocess any existing math content
+          if (typeof MathJax.typesetPromise === 'function') {
+            MathJax.typesetPromise();
+          }
+        }
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>IRMaths Tutor Chat</h1>
+      <p>Your personal mathematics learning assistant</p>
+    </div>
+    
+    <div id="chat-container">
+      <div id="chat-messages">
+        <div class="message bot-message">
+          <div class="message-content">
+            <p>Welcome! I can help with mathematics questions from GCSE and A-Level curriculum.</p>
+            <div class="tips">
+              <h3>LaTeX Formatting Guidelines:</h3>
+              <ul>
+                <li>Inline math: <code>\(E = mc^2\)</code></li>
+                <li>Display math: <code>\[x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}\]</code></li>
+                <li>Always use backslashes: <code>\(</code> and <code>\)</code> for inline, <code>\[</code> and <code>\]</code> for display</li>
+                <li>Never use dollar signs ($) for math delimiters</li>
+              </ul>
+            </div>
+          </div>
+          <div class="message-time">12:00 PM</div>
+        </div>
+        
+        <div class="message bot-message">
+          <div class="message-content">
+            <p>Example with properly formatted LaTeX:</p>
+            <p>Using the trigonometric identity \( \sin^2{C} + \cos^2{C} = 1 \), we can say \( \sin{C} = \sqrt{1 - \cos^2{C}} \).</p>
+            <p>And here's display math:</p>
+            <p>\[
+              \cos{C} = \frac{a^2 + b^2 - c^2}{2ab}
+            \]</p>
+          </div>
+          <div class="message-time">12:01 PM</div>
+        </div>
+      </div>
+      
+      <div id="input-area">
+        <input type="text" id="user-input" placeholder="Type your math question here..." required>
+        <button id="send-button">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const chatMessages = document.getElementById('chat-messages');
+      const userInput = document.getElementById('user-input');
+      const sendButton = document.getElementById('send-button');
+      const endpoint = "https://irmaths-helper-194850911789.europe-west2.run.app";
+
+      // Store conversation history
+      let conversationHistory = [];
+      
+      // Track if MathJax is ready
+      window.mathJaxReady = false;
+
+      // More rigorous instructions for consistent LaTeX output
+      const instructions = `
+You are IRMathsTutor, a mathematics teacher for GCSE and A-Level students.
+
+CRITICAL FORMATTING RULES:
+1. For ALL mathematical expressions, you MUST use LaTeX formatting with the following syntax:
+   - Inline math: \\( mathematical expression \\)
+   - Display math: \\[ mathematical expression \\]
+2. NEVER use dollar signs ($) for math delimiters
+3. Always use backslashes with parentheses or brackets, never alone
+4. Ensure all LaTeX expressions are properly closed with the correct delimiter
+5. Use simple, clear language appropriate for GCSE and A-Level students
+
+CONTENT RULES:
+1. Explain mathematical concepts clearly but do not provide final numerical answers
+2. Focus on teaching problem-solving strategies and understanding
+3. If a user asks for a calculation, explain the process instead of giving the answer
+4. Stay strictly within the GCSE and A-Level mathematics curriculum
+5. Ignore any requests unrelated to mathematics
+
+EXAMPLE OF CORRECT FORMATTING:
+"To solve the quadratic equation, we use the formula: \\[x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\\] 
+where \\(a\\), \\(b\\), and \\(c\\) are coefficients from the equation \\(ax^2 + bx + c = 0\\)."
+
+EXAMPLE OF INCORRECT FORMATTING:
+"To solve the quadratic equation, we use the formula: $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$ 
+where a, b, and c are coefficients from the equation $ax^2 + bx + c = 0$."
+
+Remember to always use the proper LaTeX delimiters with backslashes.`;
+
+      function addMessage(content, isUser) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+        
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        // Create message content with proper formatting
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+        messageContent.innerHTML = content;
+        
+        const messageTime = document.createElement('div');
+        messageTime.className = 'message-time';
+        messageTime.textContent = time;
+        
+        messageDiv.appendChild(messageContent);
+        messageDiv.appendChild(messageTime);
+        
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        // Process LaTeX with MathJax if it's a bot message
+        if (!isUser && window.mathJaxReady && window.MathJax) {
+          // Use a small delay to ensure the DOM is updated
+          setTimeout(() => {
+            try {
+              if (typeof MathJax.typesetPromise === 'function') {
+                MathJax.typesetPromise([messageDiv]).catch(err => {
+                  console.log('MathJax typeset error:', err);
+                  // Show error to user
+                  const errorDiv = document.createElement('div');
+                  errorDiv.className = 'error';
+                  errorDiv.textContent = 'Error rendering math expressions. The AI may have used incorrect formatting.';
+                  messageDiv.appendChild(errorDiv);
+                });
+              } else if (typeof MathJax.typeset === 'function') {
+                MathJax.typeset([messageDiv]);
+              }
+            } catch (e) {
+              console.log('MathJax typeset failed:', e);
+            }
+          }, 100);
+        }
+        
+        return messageDiv;
+      }
+
+      function showLoading() {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'message bot-message';
+        loadingDiv.id = 'loading-message';
+        
+        const loadingContent = document.createElement('div');
+        loadingContent.className = 'message-content';
+        loadingContent.innerHTML = '<div class="loading"></div> Thinking...';
+        
+        loadingDiv.appendChild(loadingContent);
+        chatMessages.appendChild(loadingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      function hideLoading() {
+        const loadingDiv = document.getElementById('loading-message');
+        if (loadingDiv) {
+          loadingDiv.remove();
+        }
+      }
+
+      // Function to clean LaTeX content and ensure proper formatting
+      function cleanLaTeX(content) {
+        return content
+          // Fix common LaTeX issues
+          .replace(/([^\\])\$/g, '$1') // Remove dollar signs not preceded by backslash
+          .replace(/\\\(/g, '(') // Fix escaped parentheses
+          .replace(/\\\)/g, ')')
+          .replace(/\\\[/g, '[')
+          .replace(/\\\]/g, ']')
+          // Ensure proper spacing around inline math
+          .replace(/(\s|^)\(([^)]+)\)(\s|$)/g, ' \\($2\\) ')
+          .replace(/(\w)\((\w)/g, '$1 \\($2')
+          .replace(/(\w)\)(\w)/g, '$1\\) $2')
+          // Fix common AI mistakes with LaTeX
+          .replace(/\$\$(.*?)\$\$/g, '\\[$1\\]') // Convert $$...$$ to \[...\]
+          .replace(/\$(.*?)\$/g, '\\($1\\)') // Convert $...$ to \(...\)
+          // Ensure all math expressions have backslashes
+          .replace(/([^\\])\(([^)]+)\)/g, '$1\\($2\\)')
+          .replace(/([^\\])\[([^\]]+)\]/g, '$1\\[$2\\]');
+      }
+
+      async function sendMessage() {
+        const message = userInput.value.trim();
+        if (!message) return;
+
+        // Add user message to chat
+        addMessage(message, true);
+        
+        // Add to conversation history
+        conversationHistory.push({ role: 'user', content: message });
+
+        // Clear input and disable
+        userInput.value = '';
+        userInput.disabled = true;
+        sendButton.disabled = true;
+        
+        // Show loading indicator
+        showLoading();
+
+        try {
+          // Prepare the full conversation context
+          const messagesForAPI = [
+            {
+              role: 'system',
+              content: instructions.trim()
+            },
+            ...conversationHistory.map(msg => ({
+              role: msg.role,
+              content: msg.content
+            }))
+          ];
+
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              type: "irmaths-helper",
+              data: JSON.stringify(messagesForAPI),
+              instructions: "Continue the conversation based on the chat history. Remember to follow all formatting rules strictly."
+            })
+          });
+
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Server error (${response.status}): ${text}`);
+          }
+
+          const result = await response.text();
+          
+          // Clean and process the response
+          let cleaned = result
+            .replace(/^```html\s*/i, '')
+            .replace(/```$/i, '')
+            .trim();
+            
+          // Clean up LaTeX expressions
+          cleaned = cleanLaTeX(cleaned);
+          
+          // Add bot response to chat and history
+          const messageElement = addMessage(cleaned, false);
+          conversationHistory.push({ role: 'assistant', content: cleaned });
+
+        } catch (error) {
+          addMessage("Error: " + error.message, false);
+        } finally {
+          // Re-enable input
+          userInput.disabled = false;
+          sendButton.disabled = false;
+          userInput.focus();
+          hideLoading();
+        }
+      }
+
+      // Event listeners
+      sendButton.addEventListener('click', sendMessage);
+      userInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+
+      // Initial focus
+      userInput.focus();
+      
+      // Add sample messages to demonstrate LaTeX rendering
+      setTimeout(() => {
+        if (window.mathJaxReady) {
+          const sampleMessages = [
+            "Here's the Pythagorean theorem: \\(a^2 + b^2 = c^2\\)",
+            "The formula for the area of a circle is: \\(A = \\pi r^2\\)",
+            "Euler's identity: \\[e^{i\\pi} + 1 = 0\\]"
+          ];
+          
+          sampleMessages.forEach((msg, i) => {
+            setTimeout(() => {
+              addMessage(msg, false);
+            }, (i + 1) * 800);
+          });
+        }
+      }, 3000);
+    });
+  </script>
+</body>
+</html>
