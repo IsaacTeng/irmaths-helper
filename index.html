@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>IRMaths Tutor Chat</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 20px;
+    line-height: 1.6;
+    background: linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .container { width:100%; max-width:900px; background:white; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.1); overflow:hidden; margin-top:20px; }
+  .header { background: linear-gradient(90deg,#2c3e50 0%,#4ca1af 100%); color:white; padding:20px; text-align:center; }
+  .header h1 { margin-bottom:5px; font-size:28px; }
+  .header p { opacity:.9; font-size:16px; }
+  #chat-container { display:flex; flex-direction:column; height:65vh; }
+  #chat-messages { flex-grow:1; overflow-y:auto; padding:20px; background:#fafafa; }
+  .message { margin-bottom:15px; padding:12px 16px; border-radius:18px; max-width:80%; word-wrap:break-word; box-shadow:0 2px 5px rgba(0,0,0,.05); position:relative; }
+  .user-message { background: linear-gradient(135deg,#3494E6 0%,#3457D6 100%); color:white; margin-left:auto; border-bottom-right-radius:4px; }
+  .bot-message { background:white; border:1px solid #e0e0e0; margin-right:auto; border-bottom-left-radius:4px; }
+  .message-content { line-height:1.5; white-space: normal; }
+  .message-content ul { padding-left:20px; margin:8px 0; display:block; }
+  .message-content li { margin-bottom:6px; }
+  .display-formula {
+    text-align: center;
+    font-size: 1.25em;
+    margin: 14px 0;
+    overflow-x: auto;      /* enable horizontal scrolling */
+    white-space: nowrap;    /* prevent wrapping */
+    padding: 4px;           /* optional, for spacing */
+  }
+  .message-time { font-size:0.75rem; opacity:.8; margin-top:8px; text-align:right; }
+  #input-area { display:flex; padding:15px; border-top:1px solid #e0e0e0; background:white; }
+  #user-input { flex-grow:1; padding:12px 15px; border:1px solid #ddd; border-radius:24px; font-size:1rem; outline:none; transition:border-color .3s; }
+  #user-input:focus { border-color:#3498db; box-shadow:0 0 0 2px rgba(52,152,219,.2); }
+  #send-button { margin-left:10px; padding:12px 24px; background: linear-gradient(135deg,#3494E6 0%,#3457D6 100%); color:white; border:none; border-radius:24px; cursor:pointer; font-weight:bold; transition: transform .2s, box-shadow .2s; }
+  #send-button:hover { transform: translateY(-2px); box-shadow:0 4px 8px rgba(0,0,0,.1); }
+  #send-button:disabled { background:#ccc; transform:none; box-shadow:none; cursor:not-allowed; }
+  .loading { display:inline-block; width:20px; height:20px; border:3px solid rgba(0,0,0,.1); border-radius:50%; border-top-color:#3498db; animation:spin 1s ease-in-out infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { color:#e74c3c; background:#ffeaea; padding:10px; border-radius:5px; margin:10px 0; }
+</style>
+
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']], processEscapes: true, processEnvironments: true },
+    options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'], ignoreHtmlClass: 'no-mathjax' },
+    chtml: { fontURL: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2' },
+    startup: { ready: () => { MathJax.startup.defaultReady(); window.mathJaxReady = true; console.log('MathJax ready'); } }
+  };
+</script>
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>IRMaths Tutor Chat</h1>
+      <p>Your personal mathematics learning assistant</p>
+    </div>
+
+    <div id="chat-container">
+      <div id="chat-messages"></div>
+
+      <div id="input-area">
+        <input id="user-input" type="text" placeholder="Type your math question here..." required />
+        <button id="send-button">Send</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const endpoint = "https://irmaths-helper-194850911789.europe-west2.run.app";
+  const chatMessages = document.getElementById('chat-messages');
+  const userInput = document.getElementById('user-input');
+  const sendButton = document.getElementById('send-button');
+  let conversationHistory = [];
+  window.mathJaxReady = false;
+
+  const systemInstructions = `
+You are IRMathsTutor, a mathematics teacher for GCSE and A-Level students. YOU MUST ALWAYS FOLLOW THIS :
+CRITICAL FORMATTING RULES:
+1. For ALL math, use LaTeX with $...$ for inline and $$...$$ for display. ALWAYS USE $...$ for inline and $$...$$ is RESERVED for important formulae which NEEDS to be displayed on its own line.
+2. NO whitespace inside dollar delimiters.
+3. Do not put LaTeX inside code blocks.
+4. Use dfrac when frac is required. 
+CONTENT RULES:
+1. Explain concepts and steps.
+2. Keep to GCSE and A-Level maths content. Ignore all other requests.
+3. NEVER add photos. It is not rendered at all so do NOT add photos.
+4. NEVER add full stops (.) after $$...$$, i.e. display math. Don't bold anything. 
+5. STICK to pure <p> tags.
+`;
+
+  function createMessageBubble(isUser) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message ' + (isUser ? 'user-message' : 'bot-message');
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    wrapper.appendChild(contentDiv);
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    timeDiv.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    wrapper.appendChild(timeDiv);
+    chatMessages.appendChild(wrapper);
+    return { wrapper, contentDiv };
+  }
+
+  function showLoading() {
+    if (document.getElementById('loading-message')) return;
+    const loadingWrapper = document.createElement('div');
+    loadingWrapper.className = 'message bot-message';
+    loadingWrapper.id = 'loading-message';
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.innerHTML = '<div class="loading"></div> Thinking...';
+    loadingWrapper.appendChild(contentDiv);
+    chatMessages.appendChild(loadingWrapper);
+  }
+
+  function hideLoading() {
+    const el = document.getElementById('loading-message');
+    if (el) el.remove();
+  }
+
+  function sanitizeText(text) {
+      if (!text) return '';
+
+      // Remove leading and trailing <br> only
+      while (true) {
+          const trimmed = text
+              .replace(/^(\s*<br\s*\/?>\s*)+/, '')
+              .replace(/(\s*<br\s*\/?>\s*)+$/, '');
+          if (trimmed === text) break;
+          text = trimmed;
+      }
+
+      // Remove any dot immediately after a display formula
+      text = text.replace(
+          /(\$\$[\s\S]*?\$\$)(\s*(<br\s*\/?>\s*)*[\r\n]*\s*)\.(?=\s|$)/g,
+          '$1'
+      );
+
+      // Remove code fences and unwanted symbols
+      let cleaned = text
+          .replace(/```(?:latex|math)?\s*/gi, '')
+          .replace(/```/g, '')
+          .replace(/\bhtml\b/gi, '')
+          .replace(/✦+/g, '')
+          .trim();
+
+      // Allow only <strong> and <img>
+      cleaned = cleaned.replace(/<(?!img\b|strong\b)[^>]*>/gi, '');
+
+      // Fix stray * inside <strong>
+      cleaned = cleaned.replace(
+          /<strong>\s*\*?(.*?)\*?\s*<\/strong>/g,
+          '<strong>$1</strong>'
+      );
+
+      // Convert *word* → <strong>word</strong>
+      cleaned = cleaned.replace(
+          /\*([^\s][^*]*[^\s]?)\*/g,
+          '<strong>$1</strong>'
+      );
+
+      return cleaned;
+  }
+
+  function parseSegments(raw) {
+    const segments = [];
+    let lastIndex = 0;
+    const regex = /(\$\$.*?\$\$|\$.*?\$)/gs;
+    let match;
+    while ((match = regex.exec(raw)) !== null) {
+      const before = raw.slice(lastIndex, match.index);
+      if (before) segments.push({ type: 'text', content: before });
+      const formula = match[0];
+      segments.push({ type: formula.startsWith('$$') ? 'display' : 'inline', content: formula });
+      lastIndex = regex.lastIndex;
+    }
+    const after = raw.slice(lastIndex);
+    if (after) segments.push({ type: 'text', content: after });
+    return segments;
+  }
+
+  function appendTextToken(container, token) {
+    const parts = token.split('\n');
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i].length > 0) container.appendChild(document.createTextNode(parts[i]));
+      if (i < parts.length - 1) container.appendChild(document.createElement('br'));
+    }
+  }
+
+  async function renderLaTeX(parent, formulaText) {
+    if (formulaText.startsWith('$$')) {
+      const div = document.createElement('div');
+      div.className = 'display-formula';
+      div.textContent = formulaText;
+      parent.appendChild(div);
+      await MathJax.typesetPromise([div]);
+    } else {
+      const span = document.createElement('span');
+      span.textContent = formulaText;
+      parent.appendChild(span);
+      await MathJax.typesetPromise([span]);
+    }
+  }
+
+  async function typewriterRender(messageText, contentDiv, opts = { wordDelay: 25 }) {
+      const sanitized = sanitizeText(messageText);
+      const segments = parseSegments(sanitized);
+
+      for (const seg of segments) {
+          if (seg.type === 'display' || seg.type === 'inline') {
+              await renderLaTeX(contentDiv, seg.content);
+              await new Promise(r => setTimeout(r, opts.wordDelay*2));
+          } else {
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = seg.content;
+
+              Array.from(tempDiv.childNodes).forEach(node => {
+                  if (node.nodeName === 'IMG') {
+                      contentDiv.appendChild(node.cloneNode(true));
+                  } else {
+                      const tokens = node.textContent.match(/(\s+|[^\s]+)/g) || [];
+                      tokens.forEach(token => appendTextToken(contentDiv, token));
+                  }
+              });
+
+              try {
+                  if (!window._lastTypeset || Date.now() - window._lastTypeset > 120) {
+                      window._lastTypeset = Date.now();
+                      await MathJax.typesetPromise([contentDiv]);
+                  }
+              } catch (err) {}
+          }
+      }
+  }
+
+  function addMessage(rawContent, isUser = false, typewriter = false) {
+    const { wrapper, contentDiv } = createMessageBubble(isUser);
+    if (isUser || !typewriter) {
+      appendTextToken(contentDiv, sanitizeText(rawContent));
+      if (!isUser && MathJax && MathJax.typesetPromise) MathJax.typesetPromise([contentDiv]).catch(()=>{});
+    } else {
+      typewriterRender(rawContent, contentDiv, { wordDelay: 50 }).catch(err => {
+        console.error(err);
+        appendTextToken(contentDiv, sanitizeText(rawContent));
+        if (MathJax && MathJax.typesetPromise) MathJax.typesetPromise([contentDiv]).catch(()=>{});
+      });
+    }
+
+    if (!isUser) {
+      const refNote = document.createElement('div');
+      refNote.style.fontSize = '0.7rem';
+      refNote.style.opacity = '0.7';
+      refNote.style.marginTop = '4px';
+      refNote.style.fontStyle = 'italic';
+      refNote.textContent = 'AI generated, for reference only';
+      wrapper.appendChild(refNote);
+    }
+
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return wrapper;
+  }
+
+  async function sendMessageToAI(userText) {
+    const messagesForAPI = [{ role:'system', content: systemInstructions.trim() }, ...conversationHistory];
+    messagesForAPI.push({ role:'user', content: userText });
+    const payload = {
+      type: 'irmaths-helper',
+      data: JSON.stringify(messagesForAPI),
+      instructions: 'Continue the conversation. Use @@ $$...$$ to mark important display formulas when needed.'
+    };
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const txt = await response.text().catch(()=>response.statusText);
+      throw new Error(`Server error (${response.status}): ${txt}`);
+    }
+    return await response.text();
+  }
+
+  sendButton.addEventListener('click', async () => {
+    const message = userInput.value.trim();
+    if (!message) return;
+    addMessage(message, true, false);
+    conversationHistory.push({ role:'user', content: message });
+    userInput.value = '';
+    userInput.disabled = true;
+    sendButton.disabled = true;
+    showLoading();
+    try {
+      const aiRaw = await sendMessageToAI(message);
+      conversationHistory.push({ role:'assistant', content: sanitizeText(aiRaw) });
+      hideLoading();
+      addMessage(aiRaw, false, true);
+    } catch(err) {
+      hideLoading();
+      addMessage('Error: '+(err.message||err), false, false);
+    } finally {
+      userInput.disabled = false;
+      sendButton.disabled = false;
+      userInput.focus();
+    }
+  });
+
+  userInput.addEventListener('keypress', e => { if(e.key==='Enter') sendButton.click(); });
+
+  addMessage('Welcome! I can help with mathematics questions from GCSE and A-Level curriculum.', false, false);
+
+  // Allow manual scrolling without auto-scroll blocking
+  chatMessages.addEventListener('wheel', e => {
+    const atBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 1;
+    if (!atBottom) e.stopPropagation();
+  });
+});
+</script>
+</body>
+</html>
