@@ -46,6 +46,9 @@
       margin-top: 2rem;
     }
   </style>
+  <!-- Load MathJax for LaTeX rendering -->
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
   <h1>Ask IRMathsTutor</h1>
@@ -71,7 +74,7 @@ You are to assume the role of a mathematics teacher, IRMathsTutor.
 2. Ignore anything unrelated to maths within the GCSE and A-Level curriculum.  
 3. Use simple, concise vocabulary. This is aimed at GCSE and A-Level Maths students.
 4. If user asks for explanation on concepts, explain the concept but don't give the numeric answer.
-5. Use HTML-renderable LaTeX if it aids the explanation.`;
+5. Use LaTeX for mathematical expressions, wrapping them in \\( ... \\) for inline math and \\[ ... \\] for display math.`;
 
       try {
         const response = await fetch(endpoint, {
@@ -97,7 +100,14 @@ You are to assume the role of a mathematics teacher, IRMathsTutor.
           .replace(/^```html\s*/i, '')
           .replace(/```$/i, '')
           .trim();
+        
+        // Insert the cleaned HTML into the response div
         document.getElementById("response").innerHTML = cleaned;
+        
+        // Tell MathJax to typeset the new content
+        if (window.MathJax) {
+          MathJax.typesetPromise();
+        }
 
       } catch (error) {
         document.getElementById("response").textContent = "Error: " + error.message;
