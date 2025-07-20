@@ -2,74 +2,135 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Connect to IRMaths Cloud Function</title>
+  <title>IRMaths Tutor Chat</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       padding: 2rem;
       line-height: 1.6;
       background: #f9f9f9;
+      max-width: 800px;
+      margin: 0 auto;
     }
 
-    textarea {
-      width: 100%;
-      max-width: 600px;
+    #chat-container {
+      display: flex;
+      flex-direction: column;
+      height: 70vh;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background-color: white;
+      overflow: hidden;
+    }
+
+    #chat-messages {
+      flex-grow: 1;
+      overflow-y: auto;
+      padding: 1rem;
+    }
+
+    .message {
+      margin-bottom: 1rem;
+      padding: 0.5rem 1rem;
+      border-radius: 18px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+
+    .user-message {
+      background-color: #e3f2fd;
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+
+    .bot-message {
+      background-color: #f1f1f1;
+      margin-right: auto;
+      border-bottom-left-radius: 4px;
+    }
+
+    #input-area {
+      display: flex;
+      padding: 1rem;
+      border-top: 1px solid #ccc;
+      background-color: #f5f5f5;
+    }
+
+    #user-input {
+      flex-grow: 1;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
       font-size: 1rem;
     }
 
-    #response {
-      background-color: #fff;
-      border: 1px solid #ccc;
-      padding: 1rem;
-      margin-top: 1rem;
-      max-width: 800px;
-      overflow-wrap: break-word;
-      white-space: normal;
-      word-break: break-word;
-    }
-
-    code {
-      background-color: #eee;
-      padding: 2px 4px;
+    #send-button {
+      margin-left: 0.5rem;
+      padding: 0.5rem 1rem;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
       border-radius: 4px;
-      font-family: Consolas, monospace;
+      cursor: pointer;
     }
 
-    pre {
-      background-color: #eee;
-      padding: 1rem;
-      overflow-x: auto;
-      border-radius: 4px;
+    #send-button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
     }
 
-    h2 {
-      margin-top: 2rem;
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(0,0,0,.3);
+      border-radius: 50%;
+      border-top-color: #000;
+      animation: spin 1s ease-in-out infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .message-time {
+      font-size: 0.75rem;
+      color: #666;
+      margin-top: 0.25rem;
     }
   </style>
   <!-- Load MathJax for LaTeX rendering -->
-<!--   <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
- -->
   <script src="https://cdn.bootcdn.net/ajax/libs/polyfill/7.12.1/polyfill.min.js"></script>
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)']],
+        displayMath: [['\\[', '\\]']]
+      }
+    };
+  </script>
   <script id="MathJax-script" async src="https://cdn.bootcdn.net/ajax/libs/mathjax/3.2.2/tex-mml-chtml.js"></script>
 </head>
 <body>
-  <h1>Ask IRMathsTutor</h1>
-  <form id="myForm">
-    <label for="input">Student's Question:</label><br>
-    <textarea id="input" name="input" rows="6" cols="60" required placeholder="What would you like to ask about?"></textarea><br>
-    <button type="submit">Send</button>
-  </form>
-
-  <h2>Response:</h2>
-  <div id="response">Responses will appear here.</div>
+  <h1>IRMaths Tutor Chat</h1>
+  
+  <div id="chat-container">
+    <div id="chat-messages"></div>
+    <div id="input-area">
+      <input type="text" id="user-input" placeholder="Type your math question here..." required>
+      <button id="send-button">Send</button>
+    </div>
+  </div>
 
   <script>
-    document.getElementById("myForm").addEventListener("submit", async function (event) {
-      event.preventDefault();
-
-      const inputValue = document.getElementById("input").value;
+    document.addEventListener('DOMContentLoaded', function() {
+      const chatMessages = document.getElementById('chat-messages');
+      const userInput = document.getElementById('user-input');
+      const sendButton = document.getElementById('send-button');
       const endpoint = "https://irmaths-helper-194850911789.europe-west2.run.app";
+
+      // Store conversation history
+      let conversationHistory = [];
 
       const instructions = `
 You are to assume the role of a mathematics teacher, IRMathsTutor. 
@@ -79,42 +140,122 @@ You are to assume the role of a mathematics teacher, IRMathsTutor.
 4. If user asks for explanation on concepts, explain the concept but don't give the numeric answer.
 5. Use LaTeX for mathematical expressions, wrapping them in \\( ... \\) for inline math and \\[ ... \\] for display math.`;
 
-      try {
-        const response = await fetch(endpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            type: "irmaths-helper",
-            data: inputValue,
-            instructions: instructions.trim()
-          })
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(`Server error (${response.status}): ${text}`);
-        }
-
-        const result = await response.text();
-
-        let cleaned = result
-          .replace(/^```html\s*/i, '')
-          .replace(/```$/i, '')
-          .trim();
+      function addMessage(content, isUser) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
         
-        // Insert the cleaned HTML into the response div
-        document.getElementById("response").innerHTML = cleaned;
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        messageDiv.innerHTML = `
+          <div>${content}</div>
+          <div class="message-time">${time}</div>
+        `;
         
-        // Tell MathJax to typeset the new content
-        if (window.MathJax) {
-          MathJax.typesetPromise();
-        }
-
-      } catch (error) {
-        document.getElementById("response").textContent = "Error: " + error.message;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
       }
+
+      function showLoading() {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'message bot-message';
+        loadingDiv.id = 'loading-message';
+        loadingDiv.innerHTML = '<div class="loading"></div>';
+        chatMessages.appendChild(loadingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      function hideLoading() {
+        const loadingDiv = document.getElementById('loading-message');
+        if (loadingDiv) {
+          loadingDiv.remove();
+        }
+      }
+
+      async function sendMessage() {
+        const message = userInput.value.trim();
+        if (!message) return;
+
+        // Add user message to chat
+        addMessage(message, true);
+        
+        // Add to conversation history
+        conversationHistory.push({ role: 'user', content: message });
+
+        // Clear input and disable
+        userInput.value = '';
+        userInput.disabled = true;
+        sendButton.disabled = true;
+        
+        // Show loading indicator
+        showLoading();
+
+        try {
+          // Prepare the full conversation context
+          const messagesForAPI = [
+            {
+              role: 'system',
+              content: instructions.trim()
+            },
+            ...conversationHistory.map(msg => ({
+              role: msg.role,
+              content: msg.content
+            }))
+          ];
+
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              type: "irmaths-helper",
+              data: JSON.stringify(messagesForAPI),
+              instructions: "Continue the conversation based on the chat history."
+            })
+          });
+
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Server error (${response.status}): ${text}`);
+          }
+
+          const result = await response.text();
+          
+          // Clean and process the response
+          let cleaned = result
+            .replace(/^```html\s*/i, '')
+            .replace(/```$/i, '')
+            .trim();
+          
+          // Add bot response to chat and history
+          addMessage(cleaned, false);
+          conversationHistory.push({ role: 'assistant', content: cleaned });
+
+          // Tell MathJax to typeset the new content
+          if (window.MathJax) {
+            MathJax.typesetPromise();
+          }
+
+        } catch (error) {
+          addMessage("Error: " + error.message, false);
+        } finally {
+          // Re-enable input
+          userInput.disabled = false;
+          sendButton.disabled = false;
+          userInput.focus();
+          hideLoading();
+        }
+      }
+
+      // Event listeners
+      sendButton.addEventListener('click', sendMessage);
+      userInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+
+      // Initial focus
+      userInput.focus();
     });
   </script>
 </body>
