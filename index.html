@@ -32,9 +32,9 @@
     text-align: center;
     font-size: 1.25em;
     margin: 14px 0;
-    overflow-x: auto;      /* enable horizontal scrolling */
-    white-space: nowrap;    /* prevent wrapping */
-    padding: 4px;           /* optional, for spacing */
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 4px;
   }
   .message-time { font-size:0.75rem; opacity:.8; margin-top:8px; text-align:right; }
   #input-area { display:flex; padding:15px; border-top:1px solid #e0e0e0; background:white; }
@@ -50,10 +50,17 @@
 
 <script>
   window.MathJax = {
-    tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']], processEscapes: true, processEnvironments: true },
+    tex: { 
+      inlineMath: [['$','$']], 
+      displayMath: [['$$','$$']], 
+      processEscapes: true, 
+      processEnvironments: true,
+      packages: {'[+]': ['ams']}
+    },
+    loader: { load: ['[tex]/ams'] },
     options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'], ignoreHtmlClass: 'no-mathjax' },
     chtml: { fontURL: 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/output/chtml/fonts/woff-v2' },
-    startup: { ready: () => { MathJax.startup.defaultReady(); window.mathJaxReady = true; console.log('MathJax ready'); } }
+    startup: { ready: () => { MathJax.startup.defaultReady(); window.mathJaxReady = true; } }
   };
 </script>
 <script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
@@ -85,19 +92,76 @@ document.addEventListener('DOMContentLoaded', () => {
   window.mathJaxReady = false;
 
   const systemInstructions = `
-You are IRMathsTutor, a mathematics teacher for GCSE and A-Level students. YOU MUST ALWAYS FOLLOW THIS :
-CRITICAL FORMATTING RULES:
-1. For ALL math, use LaTeX with $...$ for inline and $$...$$ for display. ALWAYS USE $...$ for inline and $$...$$ is RESERVED for important formulae which NEEDS to be displayed on its own line.
-2. NO whitespace inside dollar delimiters.
-3. Do not put LaTeX inside code blocks.
-4. Use dfrac when frac is required. 
-CONTENT RULES:
-1. Explain concepts and steps.
-2. Keep to GCSE and A-Level maths content. Ignore all other requests.
-3. NEVER add photos. It is not rendered at all so do NOT add photos.
-4. NEVER add full stops (.) after $$...$$, i.e. display math. Don't bold anything. 
-5. STICK to pure <p> tags.
-`;
+  You are IRMathsTutor, a mathematics teacher for GCSE and A-Level students. YOU MUST ALWAYS FOLLOW THIS:
+
+  CRITICAL FORMATTING RULES:
+  1. For ALL math, use LaTeX with $...$ for inline and $$...$$ for display. ALWAYS USE $...$ for inline and $$...$$ is RESERVED for important formulae which NEEDS to be displayed on its own line. 
+  2. NO whitespace inside dollar delimiters.
+  3. Do not put LaTeX inside code blocks.
+  4. Use \\dfrac for fractions (single backslash).
+  5. Always use scientific symbols and never include reference symbols.
+  6. For vectors, use \\vec{v}, \\boldsymbol{v}, or \\mathbf{v} (single backslash).
+  7. For matrices, use \\begin{bmatrix}...\\end{bmatrix} or \\begin{pmatrix}...\\end{pmatrix} (single backslash).
+  8. ALL LaTeX commands use single backslashes (\\).
+  9. Use only English and not other languages.
+  10. Do not include any <div> tags in your response.
+
+  CONTENT RULES:
+  1. Explain concepts and steps clearly.
+  2. Keep to GCSE and A-Level maths content. Ignore all other requests.
+  3. NEVER add photos. It is not rendered at all so do NOT add photos.
+  4. NEVER add full stops (.) after $$...$$, i.e. display math. Don't bold anything.
+  5. You can use <p> tags to separate paragraphs.
+  `;
+
+  function sanitizeText(text) {
+    console.log(text);
+    if (!text) return '';
+
+    // Remove leading and trailing <br> only
+    while (true) {
+      const trimmed = text
+        .replace(/^(\s*<br\s*\/?>\s*)+/, '')
+        .replace(/(\s*<br\s*\/?>\s*)+$/, '');
+      if (trimmed === text) break;
+      text = trimmed;
+    }
+
+    // Remove any dot immediately after a display formula
+    text = text.replace(
+      /(\$\$[\s\S]*?\$\$)(\s*(<br\s*\/?>\s*)*[\r\n]*\s*)\.(?=\s|$)/g,
+      '$1'
+    );
+
+    // FIXED: Convert double backslashes to single backslashes globally
+    // This fixes issues where the API returns \\frac instead of \frac
+    text = text.replace(/\\\\/g, '\\');
+
+    // Remove code fences and unwanted symbols
+    let cleaned = text
+      .replace(/```(?:latex|math)?\s*/gi, '')
+      .replace(/```/g, '')
+      .replace(/\bhtml\b/gi, '')
+      .replace(/✦+/g, '')
+      .trim();
+
+    // Allow only <strong>, <img>, and <p> tags
+    cleaned = cleaned.replace(/<(?!img\b|strong\b|p\b|\/p\b)[^>]*>/gi, '');
+
+    // Fix stray * inside <strong>
+    cleaned = cleaned.replace(
+      /<strong>\s*\*?(.*?)\*?\s*<\/strong>/g,
+      '<strong>$1</strong>'
+    );
+
+    // Convert *word* → <strong>word</strong>
+    cleaned = cleaned.replace(
+      /\*([^\s][^*]*[^\s]?)\*/g,
+      '<strong>$1</strong>'
+    );
+
+    return cleaned;
+  }
 
   function createMessageBubble(isUser) {
     const wrapper = document.createElement('div');
@@ -128,50 +192,6 @@ CONTENT RULES:
   function hideLoading() {
     const el = document.getElementById('loading-message');
     if (el) el.remove();
-  }
-
-  function sanitizeText(text) {
-      if (!text) return '';
-
-      // Remove leading and trailing <br> only
-      while (true) {
-          const trimmed = text
-              .replace(/^(\s*<br\s*\/?>\s*)+/, '')
-              .replace(/(\s*<br\s*\/?>\s*)+$/, '');
-          if (trimmed === text) break;
-          text = trimmed;
-      }
-
-      // Remove any dot immediately after a display formula
-      text = text.replace(
-          /(\$\$[\s\S]*?\$\$)(\s*(<br\s*\/?>\s*)*[\r\n]*\s*)\.(?=\s|$)/g,
-          '$1'
-      );
-
-      // Remove code fences and unwanted symbols
-      let cleaned = text
-          .replace(/```(?:latex|math)?\s*/gi, '')
-          .replace(/```/g, '')
-          .replace(/\bhtml\b/gi, '')
-          .replace(/✦+/g, '')
-          .trim();
-
-      // Allow only <strong> and <img>
-      cleaned = cleaned.replace(/<(?!img\b|strong\b)[^>]*>/gi, '');
-
-      // Fix stray * inside <strong>
-      cleaned = cleaned.replace(
-          /<strong>\s*\*?(.*?)\*?\s*<\/strong>/g,
-          '<strong>$1</strong>'
-      );
-
-      // Convert *word* → <strong>word</strong>
-      cleaned = cleaned.replace(
-          /\*([^\s][^*]*[^\s]?)\*/g,
-          '<strong>$1</strong>'
-      );
-
-      return cleaned;
   }
 
   function parseSegments(raw) {
@@ -278,7 +298,7 @@ CONTENT RULES:
     const payload = {
       type: 'irmaths-helper',
       data: JSON.stringify(messagesForAPI),
-      instructions: 'Continue the conversation. Use @@ $$...$$ to mark important display formulas when needed.'
+      instructions: 'Continue the conversation. Use $$...$$ to mark important display formulas when needed.'
     };
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -320,7 +340,6 @@ CONTENT RULES:
 
   addMessage('Welcome! I can help with mathematics questions from GCSE and A-Level curriculum.', false, false);
 
-  // Allow manual scrolling without auto-scroll blocking
   chatMessages.addEventListener('wheel', e => {
     const atBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 1;
     if (!atBottom) e.stopPropagation();
