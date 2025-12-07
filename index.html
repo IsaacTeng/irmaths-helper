@@ -115,53 +115,66 @@ document.addEventListener('DOMContentLoaded', () => {
   `;
 
   function sanitizeText(text) {
-    console.log(text);
-    if (!text) return '';
+      if (!text) return '';
 
-    // Remove leading and trailing <br> only
-    while (true) {
-      const trimmed = text
-        .replace(/^(\s*<br\s*\/?>\s*)+/, '')
-        .replace(/(\s*<br\s*\/?>\s*)+$/, '');
-      if (trimmed === text) break;
-      text = trimmed;
+      // 1. MASK MATH: Replace $$...$$ and $...$ with placeholders
+      // This prevents the HTML sanitizer from seeing '<' inside math and thinking it's a tag.
+      const mathSegments = [];
+      text = text.replace(/(\$\$[\s\S]*?\$\$|\$[^$]*?\$)/g, (match) => {
+        mathSegments.push(match);
+        return `%%%MATH${mathSegments.length - 1}%%%`;
+      });
+
+      // 2. SANITIZE HTML: Now safe to run aggressive regex on the non-math text
+      
+      // Remove leading/trailing <br>
+      while (true) {
+        const trimmed = text.replace(/^(\s*<br\s*\/?>\s*)+/, '').replace(/(\s*<br\s*\/?>\s*)+$/, '');
+        if (trimmed === text) break;
+        text = trimmed;
+      }
+
+      // Remove any dot (.) that appears immediately after a math block placeholder
+      text = text.replace(
+        /(%%%MATH\d+%%%)(\s*(<br\s*\/?>\s*)*[\r\n]*\s*)\.(?=\s|$|<)/g,
+        '$1'
+      );
+
+      // Remove unwanted HTML tags (only allow strong, p, img)
+      // Since math is masked, this won't eat "$j < i$" anymore.
+      let cleaned = text
+        .replace(/```(?:latex|math)?\s*/gi, '')
+        .replace(/```/g, '')
+        .replace(/\bhtml\b/gi, '')
+        .replace(/✦+/g, '')
+        .trim();
+
+      cleaned = cleaned.replace(/<(?!img\b|strong\b|p\b|\/p\b)[^>]*>/gi, '');
+
+      // Fix Markdown bolding
+      cleaned = cleaned.replace(/<strong>\s*\*?(.*?)\*?\s*<\/strong>/g, '<strong>$1</strong>');
+      cleaned = cleaned.replace(/\*([^\s][^*]*[^\s]?)\*/g, '<strong>$1</strong>');
+
+      // 3. UNMASK MATH: Restore the math and apply formatting fixes
+      cleaned = cleaned.replace(/%%%MATH(\d+)%%%/g, (match, index) => {
+        let math = mathSegments[parseInt(index)];
+
+        // Fix A: Remove weird backslashes after $$ or matrix delimiters (from your previous request)
+        math = math.replace(/(\$\$|\\begin\{[^}]+\}|\\end\{[^}]+\})\s*\\(?=\s|$)/g, '$1');
+
+        // Fix B: Fix double backslashes for commands (\\frac -> \frac), but keep \\ for matrix rows
+        math = math.replace(/\\\\(?=[a-zA-Z])/g, '\\');
+
+        // Fix C: Convert '<' to '\lt' inside math
+        // This is crucial: it prevents the browser from interpreting the symbol as an HTML tag
+        // even after we insert it back into the DOM. MathJax understands \lt perfectly.
+        math = math.replace(/</g, ' \\lt ');
+
+        return math;
+      });
+
+      return cleaned;
     }
-
-    // Remove any dot immediately after a display formula
-    text = text.replace(
-      /(\$\$[\s\S]*?\$\$)(\s*(<br\s*\/?>\s*)*[\r\n]*\s*)\.(?=\s|$)/g,
-      '$1'
-    );
-
-    // FIXED: Convert double backslashes to single backslashes globally
-    // This fixes issues where the API returns \\frac instead of \frac
-    text = text.replace(/\\\\/g, '\\');
-
-    // Remove code fences and unwanted symbols
-    let cleaned = text
-      .replace(/```(?:latex|math)?\s*/gi, '')
-      .replace(/```/g, '')
-      .replace(/\bhtml\b/gi, '')
-      .replace(/✦+/g, '')
-      .trim();
-
-    // Allow only <strong>, <img>, and <p> tags
-    cleaned = cleaned.replace(/<(?!img\b|strong\b|p\b|\/p\b)[^>]*>/gi, '');
-
-    // Fix stray * inside <strong>
-    cleaned = cleaned.replace(
-      /<strong>\s*\*?(.*?)\*?\s*<\/strong>/g,
-      '<strong>$1</strong>'
-    );
-
-    // Convert *word* → <strong>word</strong>
-    cleaned = cleaned.replace(
-      /\*([^\s][^*]*[^\s]?)\*/g,
-      '<strong>$1</strong>'
-    );
-
-    return cleaned;
-  }
 
   function createMessageBubble(isUser) {
     const wrapper = document.createElement('div');
